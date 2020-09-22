@@ -1,0 +1,297 @@
+version: "3.3"
+
+services:
+
+  ### Traefik Configuration
+  traefik:
+    image: "traefik:v2.0.0-rc3"
+    container_name: "traefik"
+    command:
+      #- "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=true"
+      - "--entrypoints.http.address=:80"
+      #- "--entrypoints.super-secret.address=:4040"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      #- ./traefik/traefik.toml:/traefik.toml
+      #- ./traefik/log/traefik.log:/log/traefik.log
+      #- ./traefik/log/access.log:/log/access.log
+    networks:
+      - "traefik"
+      #- "super-secret"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  ### ---------- End Traefik
+
+  ### Whoami Configuration
+  whoami:
+    image: "containous/whoami"
+    container_name: "simple-service"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`norad.mspotech.local`)"
+      - "traefik.http.routers.whoami.entrypoints=http"
+    #ports:
+      #- 8888:80
+    networks:
+      - traefik
+  ### ----------------- End Whoami
+
+  ### Airsonic Configuration
+  #airsonic:
+    #image: airsonic/airsonic
+    #container_name: airsonic
+    #environment:
+      #- PUID=1000
+      #- PGID=1000
+      #- TZ=America/Chicago
+      #- CONTEXT_PATH= #optional
+      #- JAVA_OPTS=<options> #optional
+    #volumes:
+      #- /opt/composetest/airsonic/config:/config
+      #- /opt/composetest/airsonic/music:/music
+      #- /opt/composetest/airsonic/playlists:/playlists
+      #- /opt/composetest/airsonic/podcases:/podcasts
+    #volumes:
+      # - </path/to/other media>:/media #optional
+    #ports:
+      #- 4040:4040
+    #devices:
+      #- /dev/snd:/dev/snd #optional
+    #restart: unless-stopped
+    #labels:
+      #- "traefik.enable=true"
+      #- "traefik.docker.network=super-secret"
+      #- "traefik.http.routers.airsonic.entrypoints=super-secret"
+      #- "traefik.port=8888"
+    #networks:
+      #- "traefik"
+  ### -------------- End airsonic
+
+  ### Navidrome Configuration
+  navidrome:
+    image: deluan/navidrome
+    container_name: navidrome
+    restart: unless-stopped
+    environment:
+      ND_MUSICFOLDER: /music
+      ND_DBPATH: /data/navidrome.db
+      ND_SCANINTERVAL: 1m
+      ND_LOGLEVEL: info
+      ND_PORT: 4533
+    ports:
+      - 4533:4533
+    volumes:
+      - /opt/Services/navidrome/data:/data
+      - /mnt/media/music:/music
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.navidrome-rtr.entrypoints=http"
+      - "traefik.http.routers.navidrome-rtr.rule=Host(`navidrome.yourdomain.com`)"
+      #- "traefik.http.routers.navidrome-rtr.tls=true"
+      #- "traefik.http.routers.navidrome-rtr.tls.certresolver=dns-cloudflare"
+      ## Middlewares
+      #- "traefik.http.routers.navidrome-rtr.middlewares=noauth-chain@file"
+      ## HTTP Services
+      - "traefik.http.routers.navidrome-rtr.service=navidrome-svc"
+      - "traefik.http.services.navidrome-svc.loadbalancer.server.port=4533"
+  ### --------- End Navidrome
+
+  ### Wallabag Configuration
+  wallabag:
+    image: wallabag/wallabag
+    container_name: wallabag
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=#MySqlPasswordddddddd#
+      - SYMFONY__ENV__DATABASE_DRIVER=pdo_mysql
+      - SYMFONY__ENV__DATABASE_HOST=db
+      - SYMFONY__ENV__DATABASE_PORT=3306
+      - SYMFONY__ENV__DATABASE_NAME=#DatabaseName#
+      - SYMFONY__ENV__DATABASE_USER=#DatabaseUser#
+      - SYMFONY__ENV__DATABASE_PASSWORD=#DatabaseUserPassword#
+      - SYMFONY__ENV__DATABASE_CHARSET=utf8mb4
+      - SYMFONY__ENV__MAILER_HOST=#smtpserver.yourdomain.com#
+      - SYMFONY__ENV__MAILER_USER=#wallabag@yourdomain.com#
+      - SYMFONY__ENV__MAILER_PASSWORD=#EmailPassword#
+      - SYMFONY__ENV__FROM_EMAIL=#wallabag@yourdomain.com#
+      - SYMFONY__ENV__DOMAIN_NAME=#http://yourdomain.com#
+    #ports:
+      #- "80:80"
+      #- "443:443"
+    volumes:
+      - /opt/wallabag/images:/var/www/wallabag/web/assets/images
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.wallabag-rtr.entrypoints=http"
+      - "traefik.http.routers.wallabag-rtr.rule=Host(`wallabag.yourdomain.com`)"
+      #- "traefik.http.routers.navidrome-rtr.tls=true"
+      #- "traefik.http.routers.navidrome-rtr.tls.certresolver=dns-cloudflare"
+      ## Middlewares
+      #- "traefik.http.routers.navidrome-rtr.middlewares=noauth-chain@file"
+      ## HTTP Services
+      - "traefik.http.routers.wallabag-rtr.service=wallabag-svc"
+      - "traefik.http.services.wallabag-svc.loadbalancer.server.port=4424"
+
+  mariadb:
+    image: mariadb
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=#SecurePasswordddd#
+    volumes:
+      - /opt/wallabag/data:/var/lib/mysql
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.mariadb-rtr.entrypoints=http"
+      - "traefik.http.routers.mariadb-rtr.rule=Host(`mariadb.yourdomain.com`)"
+      #- "traefik.http.routers.mariadb-rtr.tls=true"
+      #- "traefik.http.routers.mariadb-rtr.tls.certresolver=dns-cloudflare"
+      ## Middlewares
+      #- "traefik.http.routers.mariadb-rtr.middlewares=noauth-chain@file"
+  ## HTTP Services
+      - "traefik.http.routers.mariadb-rtr.service=mariadb-svc"
+      - "traefik.http.services.mariadb-svc.loadbalancer.server.port=3306"
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.redis-rtr.entrypoints=http"
+      - "traefik.http.routers.redis-rtr.rule=Host(`redis.yourdomain.com`)"
+      #- "traefik.http.routers.redis-rtr.tls=true"
+      #- "traefik.http.routers.redis-rtr.tls.certresolver=dns-cloudflare"
+      ## Middlewares
+      #- "traefik.http.routers.redis-rtr.middlewares=noauth-chain@file"
+      ## HTTP Services
+      - "traefik.http.routers.redis-rtr.service=redis-svc"
+      - "traefik.http.services.redis-svc.loadbalancer.server.port=4627"
+  ### ---------- End wallabag
+
+  ### bitwarden_rs
+  bitwdarden_rs:
+    image: bitwardenrs/server
+    container_name: bitwarden_rs
+    restart: always
+    volumes:
+      - ./bw-data:/data
+    ports:
+      - 80:80
+    environment:
+      - LOG_FILE: '/data/bitwarden.log'
+      - SIGNUPS_ALLOWED: 'true' #false for no signups
+      - ADMIN_TOKEN: #'Generate a long string..... '#
+      - SIGNUPS_VERIFY: 'true'
+      - DOMAIN: 'https://bitwarden.yourdomain.com'
+      - SMTP_HOST: 'yoursmtphost.yourdomain.com
+      - SMTP_EXPLICIT_TLS: 'true'
+      - SMTP_FROM: 'bitwarden@yourdomain.com'
+      - SMTP_FROM_NAME: 'Bitwarden System Notifications'
+      - SMTP_USERNAME: 'notifications@yourdomain.com'
+      - SMTP_PASSWORD: 'SuperSecretPassword'
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.bitwarden_rs-rtr.entrypoints=http"
+      - "traefik.http.routers.bitwarden_rs-rtr.rule=Host(`bw.mspotech.local`)"
+      #- "traefik.http.routers.bitwarden_rs-rtr.tls=true"
+      #- "traefik.http.routers.bitwarden_rs-rtr.tls.certresolver=dns-cloudflare"
+      ## Middlewares
+      #- "traefik.http.routers.bitwarden_rs-rtr.middlewares=noauth-chain@file"
+      ## HTTP Services
+      - "traefik.http.routers.bitwarden_rs-rtr.service=bitwarden_rs-svc"
+      #- "traefik.http.services.bitwarden_rs-svc.loadbalancer.server.port=4533"
+  ### bitwarden_rs
+
+
+  #BookStack - HomeLabOS Configurations
+  mysql:
+    image: mysql
+    networks:
+      - bookstack
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD={{lookup('password', './settings/passwords/bookstack_db_root_password chars=ascii_letters')}}
+      - MYSQL_DATABASE=bookstack
+      - MYSQL_USER=bookstack
+      - MYSQL_PASSWORD={{lookup('password', './settings/passwords/bookstack_db_password chars=ascii_letters')}}
+    volumes:
+      - "{{ volumes_root }}/bookstack/mysql-data:/var/lib/mysql"
+
+  bookstack:
+    image: solidnerd/bookstack
+    networks:
+      - traefik_network
+      - bookstack
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      - DB_HOST=mysql:3306
+      - DB_DATABASE=bookstack
+      - DB_USERNAME=bookstack
+      - DB_PASSWORD={{lookup('password', './settings/passwords/bookstack_db_password chars=ascii_letters')}}
+      - APP_URL=https://{% if bookstack.domain %}{{ bookstack.domain }}{% else %}{{ bookstack.subdomain + "." + domain }}{% endif %}
+
+    volumes:
+      - "{{ volumes_root }}/bookstack/uploads:/var/www/bookstack/public/uploads"
+      - "{{ volumes_root }}/bookstack/storage-uploads:/var/www/bookstack/public/storage"
+    labels:
+      - "traefik.http.services.bookstack.loadbalancer.server.scheme=http"
+      - "traefik.http.services.bookstack.loadbalancer.server.port=8080"
+    #----------- END BookStack ---------#
+
+    #------- Raspberry Pi Monitor RPI-Monitor -------#
+  rpi-monitor:
+    image: michaelmilkis/rpi-monitor
+    container_name: rpi-monitor
+    devices:
+      - "/dev/vchiq:/dev/vchiq"
+      # This device not recognized
+      #- "/dev/vcsm:/dev/vcsm"
+    volumes:
+      - /opt/vc:/opt/vc
+      - /boot:/boot
+      - /sys:/dockerhost/sys:ro
+      - /etc:/dockerhost/etc:ro
+      - /proc:/dockerhost/proc:ro
+      - /usr/lib:/dockerhost/usr/lib:ro
+    ports:
+      - 4531:8888
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.rpi-monitor-rtr.entrypoints=http"
+      - "traefik.http.routers.rpi-monitor-rtr.rule=Host(`rpimonitor.mspotech.local`)"
+      #- "traefik.http.routers.rpi-monitor-rtr.tls=true"
+      #- "traefik.http.routers.rpi-monitor-rtr.tls.certresolver=dns-cloudflare"
+      ## Middlewares
+      #- "traefik.http.routers.rpi-monitor-rtr.middlewares=noauth-chain@file"
+      ## HTTP Services
+      - "traefik.http.routers.rpi-monitor-rtr.service=rpi-monitor-svc"
+      - "traefik.http.services.rpi-monitor-svc.loadbalancer.server.port=4531"
+
+networks:
+    traefik:
+      external: true
